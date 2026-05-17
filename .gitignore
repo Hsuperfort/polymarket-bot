@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Données locales (ne pas committer)
+data/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# Streamlit
+.streamlit/

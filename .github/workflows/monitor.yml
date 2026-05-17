@@ -1,0 +1,42 @@
+name: Monitor positions
+
+on:
+  schedule:
+    - cron: '15,45 * * * *'  # à :15 et :45 (entre les scans)
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Restaurer la base de données
+        uses: actions/cache@v4
+        with:
+          path: data/polymarket.db
+          key: polymarket-db-${{ github.run_number }}
+          restore-keys: |
+            polymarket-db-
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Préparer les dossiers
+        run: mkdir -p data logs
+
+      - name: Vérifier les positions
+        env:
+          GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor.py
