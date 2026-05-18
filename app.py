@@ -46,11 +46,24 @@ if now - derniere_sync > INTERVALLE_SYNC:
     st.session_state["derniere_sync_ts"] = now
     st.session_state["derniere_actu_ts"] = 0  # force ré-actualisation des prix
 
-# Rechargement automatique de la page toutes les 5 minutes
-st.markdown(
-    f'<script>setTimeout(function(){{window.location.reload();}}, {INTERVALLE_SYNC * 1000});</script>',
-    unsafe_allow_html=True
-)
+# Timer JS : compte à rebours en temps réel + rechargement automatique
+st.markdown(f"""
+<script>
+(function() {{
+    var total = {INTERVALLE_SYNC};
+    function tick() {{
+        total--;
+        if (total <= 0) {{ window.location.reload(); return; }}
+        var m = Math.floor(total / 60);
+        var s = total % 60;
+        var el = document.getElementById('sync-countdown');
+        if (el) el.innerText = '⏱ Sync auto dans ' + m + 'm' + (s < 10 ? '0' : '') + s + 's';
+        setTimeout(tick, 1000);
+    }}
+    setTimeout(tick, 1000);
+}})();
+</script>
+""", unsafe_allow_html=True)
 
 # ─── Auto-actualisation des prix ─────────────────────────────────────────────
 
@@ -169,11 +182,7 @@ with st.sidebar:
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-prochaine = max(0, int(INTERVALLE_SYNC - (now - derniere_sync)))
-if prochaine == 0:
-    h2.caption("⏱ Sync dans moins d'une minute")
-else:
-    h2.caption(f"⏱ Sync auto dans {prochaine // 60}m{prochaine % 60:02d}s")
+h2.markdown('<span id="sync-countdown" style="font-size:0.75em; color:#888;">⏱ Chargement...</span>', unsafe_allow_html=True)
 
 if h2.button("☁️ Sync maintenant", use_container_width=True):
     _sync_git()
