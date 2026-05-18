@@ -141,7 +141,28 @@ with st.sidebar:
 
 # ─── HEADER + KPI ─────────────────────────────────────────────────────────────
 
-st.markdown("## 🎯 Polymarket Dashboard")
+# ─── Barre de synchro ─────────────────────────────────────────────────────────
+
+import subprocess
+
+h1, h2 = st.columns([5, 1])
+h1.markdown("## 🎯 Polymarket Dashboard")
+
+with h2:
+    if st.button("☁️ Synchroniser", use_container_width=True, help="Récupère la dernière DB depuis GitHub"):
+        with st.spinner("Synchronisation..."):
+            result = subprocess.run(
+                ["git", "pull", "--rebase", "origin", "main"],
+                capture_output=True, text=True, cwd="."
+            )
+        if result.returncode == 0:
+            if "positions_actualisees" in st.session_state:
+                del st.session_state["positions_actualisees"]
+            st.session_state["derniere_actu_ts"] = 0
+            st.success("Synchronisé ✓")
+            st.rerun()
+        else:
+            st.error(f"Erreur git pull : {result.stderr[-200:]}")
 
 stats    = stats_performance()
 ouvertes = charger_positions("ouvert")
