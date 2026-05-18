@@ -14,6 +14,7 @@ from notifier import envoyer_rapport
 from news_fetcher import chercher_news, formater_pour_prompt
 from database import initialiser, sauvegarder_scan
 from auto_trader import auto_ouvrir, auto_clore
+from sports_fetcher import formater_donnees_sport, get_matchs_live, get_matchs_du_jour
 
 load_dotenv()
 
@@ -247,8 +248,8 @@ Ces marchés se résolvent dans les 30 prochains jours. L'horizon court implique
 Réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
 """
 
-def analyser_marche_avec_articles(marche, articles, client):
-    """Analyse un marché court terme avec Llama 3 + actualités récentes."""
+def analyser_marche_avec_articles(marche, articles, client, tous_matchs=None):
+    """Analyse un marché court terme avec Llama 3 + actualités récentes + données SofaScore."""
 
     jours = marche["jours"]
     if jours < 1:
@@ -262,6 +263,13 @@ def analyser_marche_avec_articles(marche, articles, client):
     bloc_news = formater_pour_prompt(marche["question"], articles)
     section_news = f"\n{bloc_news}\n" if bloc_news else "\nAucune actualité récente trouvée.\n"
 
+    # Données SofaScore pour les marchés sportifs
+    section_sport = ""
+    if marche.get("is_sport") and tous_matchs:
+        bloc_sport = formater_donnees_sport(marche["question"], tous_matchs)
+        if bloc_sport:
+            section_sport = f"\n{bloc_sport}\n"
+
     prompt = f"""Analyse ce marché Polymarket court terme :
 
 Événement : {marche['event_title']}
@@ -271,8 +279,8 @@ Probabilité actuelle (YES) : {marche['prob_marche'] * 100:.1f}%
 Liquidité : {marche['liquidite']:,.0f} USDC
 Volume 24h : {marche['volume_24h']:,.0f} USDC
 Horizon : {urgence}
-{section_news}
-En intégrant les actualités ci-dessus ET tes connaissances générales, estime la probabilité réelle.
+{section_sport}{section_news}
+En intégrant les données sportives live, les actualités ET tes connaissances générales, estime la probabilité réelle.
 
 Réponds en JSON avec exactement ces champs :
 {{
@@ -409,6 +417,17 @@ def main():
         print("Aucun marché court terme ne passe les filtres.")
         return
 
+    # Charger les données SofaScore une seule fois pour tous les marchés sportifs
+    print("\n⚽ Chargement données SofaScore (matchs live + jour)...")
+    try:
+        matchs_live = get_matchs_live()
+        matchs_jour = get_matchs_du_jour()
+        tous_matchs_sport = matchs_live + matchs_jour
+        print(f"   → {len(matchs_live)} live + {len(matchs_jour)} programmés = {len(tous_matchs_sport)} matchs")
+    except Exception as e:
+        print(f"   ⚠️  SofaScore indisponible : {e}")
+        tous_matchs_sport = []
+
     print(f"\n🤖 Analyse de {len(marches)} marchés (résolution < 30 jours)...")
     analyses = []
     articles_par_marche = {}
@@ -416,7 +435,7 @@ def main():
         print(f"   [{i}/{len(marches)}] J-{m['jours']:.0f}  {m['question'][:55]}...")
         articles = chercher_news(m["question"], max_articles=4)
         articles_par_marche[m["question"]] = articles
-        analyse = analyser_marche_avec_articles(m, articles, client)
+        analyse = analyser_marche_avec_articles(m, articles, client, tous_matchs=tous_matchs_sport)
         analyses.append(analyse)
         time.sleep(0.8)
 
