@@ -169,8 +169,11 @@ with st.sidebar:
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-prochaine = int(INTERVALLE_SYNC - (now - derniere_sync))
-h2.caption(f"⏱ Sync auto dans {prochaine // 60}m{prochaine % 60:02d}s")
+prochaine = max(0, int(INTERVALLE_SYNC - (now - derniere_sync)))
+if prochaine == 0:
+    h2.caption("⏱ Sync dans moins d'une minute")
+else:
+    h2.caption(f"⏱ Sync auto dans {prochaine // 60}m{prochaine % 60:02d}s")
 
 if h2.button("☁️ Sync maintenant", use_container_width=True):
     _sync_git()
