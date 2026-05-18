@@ -7,7 +7,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-import json, pathlib
+import json, pathlib, subprocess
 import time as _time
 
 from database import (
@@ -27,11 +27,36 @@ st.set_page_config(
 
 initialiser()
 
-# ─── Auto-actualisation des prix au chargement ────────────────────────────────
+# ─── Auto-sync Git + rechargement page toutes les 5 minutes ──────────────────
+
+INTERVALLE_SYNC = 300  # secondes
+
+def _sync_git():
+    """Pull silencieux depuis GitHub pour récupérer la dernière DB."""
+    subprocess.run(
+        ["git", "pull", "--rebase", "origin", "main"],
+        capture_output=True, cwd="."
+    )
+
+now = _time.time()
+derniere_sync = st.session_state.get("derniere_sync_ts", 0)
+
+if now - derniere_sync > INTERVALLE_SYNC:
+    _sync_git()
+    st.session_state["derniere_sync_ts"] = now
+    st.session_state["derniere_actu_ts"] = 0  # force ré-actualisation des prix
+
+# Rechargement automatique de la page toutes les 5 minutes
+st.markdown(
+    f'<script>setTimeout(function(){{window.location.reload();}}, {INTERVALLE_SYNC * 1000});</script>',
+    unsafe_allow_html=True
+)
+
+# ─── Auto-actualisation des prix ─────────────────────────────────────────────
 
 def _doit_actualiser() -> bool:
     derniere = st.session_state.get("derniere_actu_ts", 0)
-    return (_time.time() - derniere) > 300
+    return (_time.time() - derniere) > INTERVALLE_SYNC
 
 if _doit_actualiser():
     _ouvertes = charger_positions("ouvert")
@@ -139,30 +164,19 @@ with st.sidebar:
     st.caption(f"Mise auto : **{mise_auto:.0f} USDC**")
 
 
-# ─── HEADER + KPI ─────────────────────────────────────────────────────────────
-
-# ─── Barre de synchro ─────────────────────────────────────────────────────────
-
-import subprocess
+# ─── HEADER ───────────────────────────────────────────────────────────────────
 
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-with h2:
-    if st.button("☁️ Synchroniser", use_container_width=True, help="Récupère la dernière DB depuis GitHub"):
-        with st.spinner("Synchronisation..."):
-            result = subprocess.run(
-                ["git", "pull", "--rebase", "origin", "main"],
-                capture_output=True, text=True, cwd="."
-            )
-        if result.returncode == 0:
-            if "positions_actualisees" in st.session_state:
-                del st.session_state["positions_actualisees"]
-            st.session_state["derniere_actu_ts"] = 0
-            st.success("Synchronisé ✓")
-            st.rerun()
-        else:
-            st.error(f"Erreur git pull : {result.stderr[-200:]}")
+prochaine = int(INTERVALLE_SYNC - (now - derniere_sync))
+h2.caption(f"⏱ Sync auto dans {prochaine // 60}m{prochaine % 60:02d}s")
+
+if h2.button("☁️ Sync maintenant", use_container_width=True):
+    _sync_git()
+    st.session_state["derniere_sync_ts"] = _time.time()
+    st.session_state["derniere_actu_ts"] = 0
+    st.rerun()
 
 stats    = stats_performance()
 ouvertes = charger_positions("ouvert")
