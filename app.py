@@ -9,6 +9,7 @@ import plotly.express as px
 import pandas as pd
 import json, pathlib, subprocess
 import time as _time
+from streamlit_autorefresh import st_autorefresh
 
 from database import (
     initialiser,
@@ -27,24 +28,24 @@ st.set_page_config(
 
 initialiser()
 
-# ─── Auto-sync Git + rechargement page toutes les 5 minutes ──────────────────
+# ─── Auto-refresh toutes les 5 minutes ───────────────────────────────────────
 
 INTERVALLE_SYNC = 300  # secondes
 
-def _sync_git():
-    """Pull silencieux depuis GitHub pour récupérer la dernière DB."""
-    subprocess.run(
-        ["git", "pull", "--rebase", "origin", "main"],
-        capture_output=True, cwd="."
-    )
+# Déclenche un rerun Streamlit toutes les 5 minutes (compte les cycles)
+_refresh_count = st_autorefresh(interval=INTERVALLE_SYNC * 1000, key="autorefresh")
 
+def _sync_git():
+    subprocess.run(["git", "pull", "--rebase", "origin", "main"],
+                   capture_output=True, cwd=".")
+
+# Git pull à chaque rerun automatique (pas sur les interactions manuelles)
 now = _time.time()
 derniere_sync = st.session_state.get("derniere_sync_ts", 0)
-
 if now - derniere_sync > INTERVALLE_SYNC:
     _sync_git()
     st.session_state["derniere_sync_ts"] = now
-    st.session_state["derniere_actu_ts"] = 0  # force ré-actualisation des prix
+    st.session_state["derniere_actu_ts"] = 0
 
 
 # ─── Auto-actualisation des prix ─────────────────────────────────────────────
@@ -164,25 +165,7 @@ with st.sidebar:
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-h2.markdown(f"""
-<div id="sync-cd" style="font-size:0.75em; color:#888; text-align:center;">⏱ …</div>
-<script>
-(function(){{
-  var t={INTERVALLE_SYNC};
-  function tick(){{
-    t--;
-    if(t<=0){{window.location.reload();return;}}
-    var el=document.getElementById('sync-cd');
-    if(el){{
-      var m=Math.floor(t/60), s=t%60;
-      el.innerText='⏱ Sync dans '+m+'m'+(s<10?'0':'')+s+'s';
-    }}
-    setTimeout(tick,1000);
-  }}
-  tick();
-}})();
-</script>
-""", unsafe_allow_html=True)
+h2.caption(f"🔄 Sync #{_refresh_count} — auto toutes les 5 min")
 
 if h2.button("☁️ Sync maintenant", use_container_width=True):
     _sync_git()
