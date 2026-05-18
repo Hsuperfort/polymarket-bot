@@ -7,7 +7,8 @@ import json
 import requests
 
 POLYMARKET_API = "https://gamma-api.polymarket.com"
-SEUIL_CIBLE    = 0.90   # on alerte si le prix a parcouru 90 % du chemin vers la cible
+SEUIL_CIBLE     = 0.90   # alerte si le prix a parcouru 90 % du chemin vers la cible
+SEUIL_STOP_LOSS = -0.50  # stop-loss si le prix recule de 50 % de la distance vers la cible
 
 
 def extraire_slug(url: str) -> str:
@@ -87,11 +88,20 @@ def actualiser_prix(positions_ouvertes: list) -> list:
             else:
                 progression = 0.0
 
-            alerte = progression >= SEUIL_CIBLE * 100
+            alerte     = progression >= SEUIL_CIBLE * 100
+            stop_loss  = progression <= SEUIL_STOP_LOSS * 100
         else:
             pnl_l       = 0.0
             progression = 0.0
             alerte      = False
+            stop_loss   = False
+
+        # Prix de stop-loss pour affichage
+        demi_edge = abs(prix_yes_cible - prix_yes_entree) / 2
+        if direction == "YES":
+            prix_stop = round(prix_yes_entree - demi_edge, 4)
+        else:
+            prix_stop = round(prix_yes_entree + demi_edge, 4)
 
         resultats.append({
             **pos,
@@ -99,6 +109,8 @@ def actualiser_prix(positions_ouvertes: list) -> list:
             "pnl_latent"  : pnl_l,
             "progression" : progression,
             "alerte"      : alerte,
+            "stop_loss"   : stop_loss,
+            "prix_stop"   : prix_stop,
         })
 
     return resultats

@@ -97,7 +97,10 @@ def auto_clore() -> list:
     clôturées   = []
 
     for pos in actualisees:
-        if not pos.get("alerte"):
+        atteint   = pos.get("alerte", False)
+        stop      = pos.get("stop_loss", False)
+
+        if not atteint and not stop:
             continue
 
         prix_yes_actuel = pos.get("prix_actuel")
@@ -109,15 +112,21 @@ def auto_clore() -> list:
 
         # Notification Telegram
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-            pnl        = pos.get("pnl_latent", 0)
-            pnl_signe  = "+" if pnl >= 0 else ""
-            direction  = pos.get("direction", "YES")
-            mise       = pos.get("mise", 0)
-            valeur     = round(mise + pnl, 2)
-            icone      = "✅" if pnl >= 0 else "❌"
+            pnl       = pos.get("pnl_latent", 0)
+            pnl_signe = "+" if pnl >= 0 else ""
+            direction = pos.get("direction", "YES")
+            mise      = pos.get("mise", 0)
+            valeur    = round(mise + pnl, 2)
+
+            if stop:
+                icone  = "🛑"
+                titre  = "Stop-loss déclenché"
+            else:
+                icone  = "✅"
+                titre  = "Objectif atteint"
 
             envoyer_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, (
-                f"{icone} *Objectif atteint — Position clôturée*\n\n"
+                f"{icone} *{titre} — Position clôturée*\n\n"
                 f"*{pos.get('question', '')[:80]}*\n\n"
                 f"Direction : {'YES' if direction == 'YES' else 'NO'}\n"
                 f"Mise : `{mise:.0f} $`  →  Valeur : `{valeur:.2f} $`\n"
