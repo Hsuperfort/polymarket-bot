@@ -130,7 +130,7 @@ def conf_badge(c):
 CONFIG_PATH = pathlib.Path("config.json")
 
 def charger_config():
-    defaults = {"mise_auto": 10.0, "score_min": 6, "max_positions": 50}
+    defaults = {"mise_auto": 10.0, "score_min": 6, "score_min_court": 5, "max_positions": 50}
     if CONFIG_PATH.exists():
         try:
             return {**defaults, **json.loads(CONFIG_PATH.read_text())}
@@ -146,18 +146,37 @@ cfg = charger_config()
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres du bot")
     st.divider()
-    mise_auto = st.number_input("💵 Mise par position (USDC)", min_value=1.0, max_value=500.0,
-                                 value=float(cfg["mise_auto"]), step=1.0)
-    score_min = st.slider("🎯 Score minimum", min_value=1, max_value=10, value=int(cfg["score_min"]))
-    max_pos   = st.slider("📊 Positions max",  min_value=1, max_value=50,  value=int(cfg["max_positions"]))
+
+    mise_auto       = st.number_input("💵 Mise par position (USDC)", min_value=1.0, max_value=500.0,
+                                       value=float(cfg["mise_auto"]), step=1.0)
+    st.markdown("**🎯 Score minimum**")
+    score_min_court = st.slider("Court terme < 7j", min_value=1, max_value=10,
+                                 value=int(cfg["score_min_court"]),
+                                 help="Intraday + marchés se résolvant dans la semaine")
+    score_min       = st.slider("Long terme 7-14j", min_value=1, max_value=10,
+                                 value=int(cfg["score_min"]),
+                                 help="Marchés se résolvant dans les 7 à 14 jours")
+    max_pos         = st.slider("📊 Positions max", min_value=1, max_value=50,
+                                 value=int(cfg["max_positions"]))
 
     if st.button("💾 Enregistrer", use_container_width=True, type="primary"):
-        sauvegarder_config({"mise_auto": mise_auto, "score_min": score_min, "max_positions": max_pos})
-        st.success("Paramètres enregistrés ✓")
+        nouvelle_config = {
+            "mise_auto"      : mise_auto,
+            "score_min"      : score_min,
+            "score_min_court": score_min_court,
+            "max_positions"  : max_pos,
+        }
+        sauvegarder_config(nouvelle_config)
+        # Pousse automatiquement sur GitHub pour que le bot en tienne compte
+        subprocess.run(["git", "add", "config.json"], cwd=".")
+        subprocess.run(["git", "commit", "-m", "Update config depuis dashboard"], cwd=".")
+        subprocess.run(["git", "push"], cwd=".")
+        st.success("Paramètres enregistrés et synchronisés ✓")
 
     st.divider()
     st.caption(f"Positions ouvertes : **{len(charger_positions('ouvert'))}** / {max_pos}")
-    st.caption(f"Score min actif : **{score_min}/10**")
+    st.caption(f"Score court terme : **{score_min_court}/10**")
+    st.caption(f"Score long terme  : **{score_min}/10**")
     st.caption(f"Mise auto : **{mise_auto:.0f} USDC**")
 
 
