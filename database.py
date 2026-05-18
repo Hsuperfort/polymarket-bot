@@ -158,6 +158,28 @@ def sauvegarder_scan(opportunites: list, articles_par_marche: dict) -> int:
     return scan_id
 
 
+def charger_scans_recents(n: int = 10):
+    """Retourne les n derniers scans avec leurs opportunités."""
+    conn  = connexion()
+    scans = conn.execute(
+        "SELECT * FROM scans ORDER BY id DESC LIMIT ?", (n,)
+    ).fetchall()
+
+    resultats = []
+    for scan in scans:
+        opps = conn.execute(
+            "SELECT * FROM opportunites WHERE scan_id = ? ORDER BY score DESC",
+            (scan["id"],)
+        ).fetchall()
+        resultats.append({
+            "scan": dict(scan),
+            "opportunites": [dict(o) for o in opps],
+        })
+
+    conn.close()
+    return resultats
+
+
 def charger_dernier_scan():
     conn  = connexion()
     scan  = conn.execute("SELECT * FROM scans ORDER BY id DESC LIMIT 1").fetchone()

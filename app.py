@@ -17,6 +17,7 @@ from database import (
     charger_positions,
     clore_position,
     stats_performance,
+    charger_scans_recents,
 )
 from resolver import actualiser_prix
 
@@ -245,10 +246,11 @@ st.markdown('<div class="kpi-divider"></div>', unsafe_allow_html=True)
 
 # ─── ONGLETS ──────────────────────────────────────────────────────────────────
 
-tab_positions, tab_historique, tab_performance = st.tabs([
+tab_positions, tab_historique, tab_performance, tab_scans = st.tabs([
     "💼 Positions ouvertes",
     "📋 Historique",
     "📈 Performance",
+    "🔍 Rapport des scans",
 ])
 
 
@@ -515,3 +517,89 @@ with tab_performance:
             )
             fig3.update_layout(margin=dict(l=0, r=0, t=40, b=0), showlegend=False)
             st.plotly_chart(fig3, use_container_width=True)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ONGLET 4 — RAPPORT DES SCANS
+# ════════════════════════════════════════════════════════════════════════
+
+with tab_scans:
+
+    scans_data = charger_scans_recents(10)
+
+    if not scans_data:
+        st.info("Aucun scan enregistré pour l'instant.")
+    else:
+        # Sélecteur de scan
+        options = {
+            f"{s['scan']['timestamp'][:16].replace('T',' ')}  —  {len(s['opportunites'])} opportunités  ({s['scan']['nb_marches']} marchés)": i
+            for i, s in enumerate(scans_data)
+        }
+        choix = st.selectbox("Sélectionner un scan", list(options.keys()), index=0)
+        idx_choisi = options[choix]
+        scan_choisi = scans_data[idx_choisi]
+        opps = scan_choisi["opportunites"]
+
+        # KPIs du scan
+        nb_skip    = sum(1 for o in opps if o.get("direction") == "SKIP")
+        nb_actifs  = len(opps) - nb_skip
+        score_moy  = round(sum(o.get("score") or 0 for o in opps) / len(opps), 1) if opps else 0
+        score_max  = max((o.get("score") or 0 for o in opps), default=0)
+        nb_yes     = sum(1 for o in opps if o.get("direction") == "YES")
+        nb_no      = sum(1 for o in opps if o.get("direction") == "NO")
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.markdown(kpi("Marchés analysés", scan_choisi["scan"]["nb_marches"], "blue"),  unsafe_allow_html=True)
+        k2.markdown(kpi("Opportunités",     nb_actifs, "yellow"), unsafe_allow_html=True)
+        k3.markdown(kpi("Score moyen",      f"{score_moy}/10", "white"), unsafe_allow_html=True)
+        k4.markdown(kpi("Score max",        f"{score_max}/10", "green" if score_max >= 6 else "yellow"), unsafe_allow_html=True)
+        k5.markdown(kpi("YES / NO",         f"{nb_yes} / {nb_no}", "white"), unsafe_allow_html=True)
+
+        st.divider()
+
+        # Filtre score minimum
+        filtre_score = st.slider("Afficher uniquement score ≥", min_value=0, max_value=10, value=0)
+        opps_filtrees = [o for o in opps if (o.get("score") or 0) >= filtre_score and o.get("direction") != "SKIP"]
+
+        if not opps_filtrees:
+            st.info("Aucune opportunité pour ce filtre.")
+        else:
+            rows = []
+            for o in opps_filtrees:
+                score     = o.get("score") or 0
+                direction = o.get("direction", "—")
+                prob_m    = (o.get("prob_marche") or 0) * 100
+                prob_e    = (o.get("prob_estimee") or 0) * 100
+                edge      = round(abs(prob_e - prob_m), 1)
+                jours     = o.get("jours")
+                icone     = "🔥" if score >= 7 else ("⚡" if score >= 5 else "💤")
+                rows.append({
+                    ""          : icone,
+                    "Score"     : score,
+                    "Dir."      : direction,
+                    "Confiance" : o.get("confiance", "—"),
+                    "J."        : f"{jours:.1f}" if jours is not None else "—",
+                    "Marché %"  : f"{prob_m:.1f}",
+                    "IA %"      : f"{prob_e:.1f}",
+                    "Edge"      : edge,
+                    "Question"  : o.get("question", "")[:70] + ("…" if len(o.get("question","")) > 70 else ""),
+                    "Analyse"   : (o.get("raisonnement") or "")[:120],
+                })
+
+            df_scans = pd.DataFrame(rows)
+            st.dataframe(
+                df_scans.style.applymap(
+                    lambda v: "color: #00d4aa; font-weight: 700" if v == "YES"
+                              else ("color: #ff6666; font-weight: 700" if v == "NO" else ""),
+                    subset=["Dir."]
+                ).applymap(
+                    lambda v: (
+                        "color: #00ff88; font-weight:700" if isinstance(v, int) and v >= 7
+                        else ("color: #ffd700" if isinstance(v, int) and v >= 5 else "")
+                    ),
+                    subset=["Score"]
+                ),
+                use_container_width=True,
+                hide_index=True,
+                height=600,
+            )
