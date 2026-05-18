@@ -302,10 +302,23 @@ Réponds UNIQUEMENT avec le JSON."""
         fin   = texte.rfind("}") + 1
         texte = texte[debut:fin] if debut != -1 else texte
         analyse = json.loads(texte)
+
+        # Validation cohérence direction / prob_estimee
+        prob_m = marche["prob_marche"]
+        prob_e = float(analyse.get("prob_estimee", prob_m))
+        direction = analyse.get("direction", "SKIP")
+
+        if direction == "YES" and prob_e <= prob_m:
+            # LLM dit YES mais estime une proba plus basse → incohérent, forcer NO
+            analyse["direction"] = "NO"
+        elif direction == "NO" and prob_e >= prob_m:
+            # LLM dit NO mais estime une proba plus haute → incohérent, forcer YES
+            analyse["direction"] = "YES"
+
         analyse.update({
             "event_title" : marche["event_title"],
             "question"    : marche["question"],
-            "prob_marche" : marche["prob_marche"],
+            "prob_marche" : prob_m,
             "liquidite"   : marche["liquidite"],
             "volume_24h"  : marche["volume_24h"],
             "jours"       : marche["jours"],
