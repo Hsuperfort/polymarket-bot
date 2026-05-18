@@ -4,6 +4,7 @@ Lancement : streamlit run app.py
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
@@ -165,7 +166,25 @@ with st.sidebar:
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-h2.caption(f"🔄 Sync #{_refresh_count} — auto toutes les 5 min")
+with h2:
+    components.html(f"""
+    <style>
+      body {{ margin:0; background:transparent; }}
+      #cd {{ color:#888; font-size:12px; text-align:right; font-family:sans-serif; padding-top:6px; }}
+    </style>
+    <div id="cd">⏱ 5m00s</div>
+    <script>
+      var t = {INTERVALLE_SYNC};
+      function tick() {{
+        t--;
+        if (t < 0) t = {INTERVALLE_SYNC};
+        var m = Math.floor(t/60), s = t%60;
+        document.getElementById('cd').innerText = '⏱ ' + m + 'm' + (s<10?'0':'') + s + 's';
+        setTimeout(tick, 1000);
+      }}
+      tick();
+    </script>
+    """, height=35)
 
 if h2.button("☁️ Sync maintenant", use_container_width=True):
     _sync_git()
