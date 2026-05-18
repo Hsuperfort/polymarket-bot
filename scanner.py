@@ -32,12 +32,13 @@ FILTRE_PROB_MIN       = 0.05
 FILTRE_PROB_MAX       = 0.95
 FILTRE_JOURS_MIN      = 0.04    # ~1 heure minimum (évite les marchés en cours de résolution)
 FILTRE_JOURS_MAX      = 14      # 14 jours max
-NB_MARCHES_MAX        = 600
+NB_MARCHES_MAX        = 1500
+BATCH_SIZE            = 5       # marchés analysés par appel LLM
 
 # Répartition par horizon
-QUOTA_INTRADAY        = 120     # < 24h  (crypto, sport du jour, événements immédiats)
-QUOTA_TRES_COURT      = 360     # 1-7j
-QUOTA_COURT           = 120     # 7-14j
+QUOTA_INTRADAY        = 200     # < 24h  (crypto, sport du jour, événements immédiats)
+QUOTA_TRES_COURT      = 1000    # 1-7j
+QUOTA_COURT           = 300     # 7-14j
 
 POLYMARKET_API = "https://gamma-api.polymarket.com"
 
@@ -57,7 +58,7 @@ def recuperer_evenements():
     tous = []
     limite_par_page = 100
 
-    for offset in range(0, 1200, limite_par_page):
+    for offset in range(0, 2500, limite_par_page):
         params = {
             "active"    : "true",
             "closed"    : "false",
@@ -254,57 +255,51 @@ Barème du score (utilise TOUTE l'échelle) :
 Réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
 """
 
-def analyser_marche_avec_articles(marche, articles, client, tous_matchs=None):
-    """Analyse un marché court terme avec Llama 3 + actualités récentes + données SofaScore."""
+def analyser_batch(marches_batch: list, client, tous_matchs=None) -> list:
+    """Analyse un groupe de marchés en un seul appel LLM. Retourne une liste d'analyses."""
+    n = len(marches_batch)
+    blocs = []
 
-    jours = marche["jours"]
-    if jours < 1:
-        heures = round(jours * 24, 1)
-        urgence = f"🚨 INTRADAY — résolution dans {heures:.0f} heures. L'état actuel prime sur tout."
-    elif jours < 3:
-        urgence = f"⚠️ URGENT — résolution dans {jours:.1f} jours"
-    else:
-        urgence = f"résolution dans {jours:.0f} jours"
+    for idx, m in enumerate(marches_batch, 1):
+        jours = m["jours"]
+        if jours < 1:
+            urgence = f"INTRADAY ({jours*24:.0f}h)"
+        elif jours < 3:
+            urgence = f"URGENT ({jours:.1f}j)"
+        else:
+            urgence = f"{jours:.0f}j"
 
-    bloc_news = formater_pour_prompt(marche["question"], articles)
-    section_news = f"\n{bloc_news}\n" if bloc_news else "\nAucune actualité récente trouvée.\n"
+        articles = chercher_news(m["question"], max_articles=2)
+        bloc_news = formater_pour_prompt(m["question"], articles)
+        news_str = bloc_news if bloc_news else "Aucune actualité."
 
-    # Données SofaScore pour les marchés sportifs
-    section_sport = ""
-    if marche.get("is_sport") and tous_matchs:
-        bloc_sport = formater_donnees_sport(marche["question"], tous_matchs)
-        if bloc_sport:
-            section_sport = f"\n{bloc_sport}\n"
+        sport_str = ""
+        if m.get("is_sport") and tous_matchs:
+            bloc = formater_donnees_sport(m["question"], tous_matchs)
+            if bloc:
+                sport_str = f"\n    {bloc}"
 
-    prompt = f"""Analyse ce marché Polymarket court terme :
+        blocs.append(
+            f"[{idx}] {m['question']}\n"
+            f"    Prob YES: {m['prob_marche']*100:.1f}% | {urgence} | "
+            f"Liq: {m['liquidite']:,.0f} USDC{sport_str}\n"
+            f"    {news_str}"
+        )
 
-Événement : {marche['event_title']}
-Question : {marche['question']}
-Description : {marche['description']}
-Probabilité actuelle (YES) : {marche['prob_marche'] * 100:.1f}%
-Liquidité : {marche['liquidite']:,.0f} USDC
-Volume 24h : {marche['volume_24h']:,.0f} USDC
-Horizon : {urgence}
-{section_sport}{section_news}
-En intégrant les données sportives live, les actualités ET tes connaissances générales, estime la probabilité réelle.
+    prompt = "\n\n".join(blocs) + f"""
 
-Réponds en JSON avec exactement ces champs :
-{{
-  "prob_estimee": <float 0-1, ta meilleure estimation tenant compte des news>,
-  "confiance": <"faible"|"moyenne"|"haute" — haute seulement si les news confirment clairement>,
-  "direction": <"YES"|"NO"|"SKIP">,
-  "edge": <float, différence absolue entre ta proba et celle du marché>,
-  "score": <int 0-10, utilise le barème complet — un edge de 10 points avec signal modéré vaut 5-6, un edge de 20+ points vaut 7-8>,
-  "raisonnement": <string, 2-3 phrases factuelles citant les news si pertinent>
-}}
-
-Si les news et tes connaissances ne permettent pas de trancher, mets direction="SKIP" et score=0.
-Réponds UNIQUEMENT avec le JSON."""
+Analyse ces {n} marchés. Réponds avec un tableau JSON de exactement {n} objets dans l'ordre :
+[
+  {{"prob_estimee":<0-1>,"confiance":<"faible"|"moyenne"|"haute">,"direction":<"YES"|"NO"|"SKIP">,"edge":<float>,"score":<0-10>,"raisonnement":<1-2 phrases>}},
+  ...
+]
+Barème score : 0-2=pas d'opinion | 3-4=légère conviction | 5-6=conviction réelle (edge 5-15pts) | 7-8=forte conviction (edge>15pts) | 9-10=marché mal pricé.
+Réponds UNIQUEMENT avec le tableau JSON."""
 
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
-            max_tokens=450,
+            max_tokens=200 * n,
             messages=[
                 {"role": "system", "content": PROMPT_SYSTEME},
                 {"role": "user",   "content": prompt},
@@ -312,39 +307,51 @@ Réponds UNIQUEMENT avec le JSON."""
             temperature=0.15,
         )
         texte = response.choices[0].message.content.strip()
-        debut = texte.find("{")
-        fin   = texte.rfind("}") + 1
-        texte = texte[debut:fin] if debut != -1 else texte
-        analyse = json.loads(texte)
+        debut = texte.find("[")
+        fin   = texte.rfind("]") + 1
+        if debut == -1:
+            return [None] * n
+        resultats = json.loads(texte[debut:fin])
+        if not isinstance(resultats, list):
+            return [None] * n
 
-        # Validation cohérence direction / prob_estimee
-        prob_m = marche["prob_marche"]
-        prob_e = float(analyse.get("prob_estimee", prob_m))
-        direction = analyse.get("direction", "SKIP")
+        analyses = []
+        for m, res in zip(marches_batch, resultats):
+            if not isinstance(res, dict):
+                analyses.append(None)
+                continue
 
-        if direction == "YES" and prob_e <= prob_m:
-            # LLM dit YES mais estime une proba plus basse → incohérent, forcer NO
-            analyse["direction"] = "NO"
-        elif direction == "NO" and prob_e >= prob_m:
-            # LLM dit NO mais estime une proba plus haute → incohérent, forcer YES
-            analyse["direction"] = "YES"
+            prob_m    = m["prob_marche"]
+            prob_e    = float(res.get("prob_estimee", prob_m))
+            direction = res.get("direction", "SKIP")
 
-        analyse.update({
-            "event_title" : marche["event_title"],
-            "question"    : marche["question"],
-            "prob_marche" : prob_m,
-            "liquidite"   : marche["liquidite"],
-            "volume_24h"  : marche["volume_24h"],
-            "jours"       : marche["jours"],
-            "url"         : marche["url"],
-        })
-        return analyse
+            if direction == "YES" and prob_e <= prob_m:
+                res["direction"] = "NO"
+            elif direction == "NO" and prob_e >= prob_m:
+                res["direction"] = "YES"
+
+            res.update({
+                "event_title": m["event_title"],
+                "question"   : m["question"],
+                "prob_marche": prob_m,
+                "liquidite"  : m["liquidite"],
+                "volume_24h" : m["volume_24h"],
+                "jours"      : m["jours"],
+                "url"        : m["url"],
+            })
+            analyses.append(res)
+
+        while len(analyses) < n:
+            analyses.append(None)
+
+        return analyses
+
     except json.JSONDecodeError:
-        print(f"   ⚠️  JSON invalide pour : {marche['question'][:50]}")
-        return None
+        print(f"   ⚠️  JSON invalide (batch {n} marchés)")
+        return [None] * n
     except Exception as e:
-        print(f"   ⚠️  Erreur : {e}")
-        return None
+        print(f"   ⚠️  Erreur batch : {e}")
+        return [None] * n
 
 
 # ─── Affichage ────────────────────────────────────────────────────────────────
@@ -434,16 +441,20 @@ def main():
         print(f"   ⚠️  SofaScore indisponible : {e}")
         tous_matchs_sport = []
 
-    print(f"\n🤖 Analyse de {len(marches)} marchés (résolution < 30 jours)...")
+    nb_batches = (len(marches) + BATCH_SIZE - 1) // BATCH_SIZE
+    print(f"\n🤖 Analyse — {len(marches)} marchés en {nb_batches} batches de {BATCH_SIZE}...")
     analyses = []
     articles_par_marche = {}
-    for i, m in enumerate(marches, 1):
-        print(f"   [{i}/{len(marches)}] J-{m['jours']:.0f}  {m['question'][:55]}...")
-        articles = chercher_news(m["question"], max_articles=4)
-        articles_par_marche[m["question"]] = articles
-        analyse = analyser_marche_avec_articles(m, articles, client, tous_matchs=tous_matchs_sport)
-        analyses.append(analyse)
-        time.sleep(0.8)
+
+    for i in range(0, len(marches), BATCH_SIZE):
+        batch      = marches[i:i + BATCH_SIZE]
+        batch_num  = i // BATCH_SIZE + 1
+        print(f"   [Batch {batch_num}/{nb_batches}] {batch[0]['question'][:50]}...")
+        batch_analyses = analyser_batch(batch, client, tous_matchs=tous_matchs_sport)
+        for m, a in zip(batch, batch_analyses):
+            articles_par_marche[m["question"]] = []
+        analyses.extend(batch_analyses)
+        time.sleep(1.2)
 
     opportunites = afficher_resultats(analyses)
 
