@@ -32,12 +32,12 @@ FILTRE_PROB_MIN       = 0.05
 FILTRE_PROB_MAX       = 0.95
 FILTRE_JOURS_MIN      = 0.04    # ~1 heure minimum (évite les marchés en cours de résolution)
 FILTRE_JOURS_MAX      = 14      # 14 jours max
-NB_MARCHES_MAX        = 300
+NB_MARCHES_MAX        = 600
 
 # Répartition par horizon
-QUOTA_INTRADAY        = 60      # < 24h  (crypto, sport du jour, événements immédiats)
-QUOTA_TRES_COURT      = 180     # 1-7j
-QUOTA_COURT           = 60      # 7-14j
+QUOTA_INTRADAY        = 120     # < 24h  (crypto, sport du jour, événements immédiats)
+QUOTA_TRES_COURT      = 360     # 1-7j
+QUOTA_COURT           = 120     # 7-14j
 
 POLYMARKET_API = "https://gamma-api.polymarket.com"
 
@@ -57,7 +57,7 @@ def recuperer_evenements():
     tous = []
     limite_par_page = 100
 
-    for offset in range(0, 600, limite_par_page):
+    for offset in range(0, 1200, limite_par_page):
         params = {
             "active"    : "true",
             "closed"    : "false",
