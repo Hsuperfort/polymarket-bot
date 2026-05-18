@@ -6,7 +6,7 @@ import os
 import json
 import pathlib
 from dotenv import load_dotenv
-from database import ouvrir_position, clore_position, charger_positions
+from database import ouvrir_position, clore_position, charger_positions, marquer_stop_loss
 from resolver import actualiser_prix
 from notifier import envoyer_message
 
@@ -101,13 +101,18 @@ def auto_clore() -> list:
     clôturées   = []
 
     for pos in actualisees:
-        atteint   = pos.get("alerte", False)
-        stop      = pos.get("stop_loss", False)
+        atteint = pos.get("alerte", False)
+        stop    = pos.get("stop_loss", False) or bool(pos.get("stop_loss_triggered"))
+
+        # Persiste le flag dès la première détection (même si le prix est récupérable)
+        if pos.get("stop_loss", False) and not pos.get("stop_loss_triggered"):
+            marquer_stop_loss(pos["id"], pos.get("prix_actuel"))
 
         if not atteint and not stop:
             continue
 
-        prix_yes_actuel = pos.get("prix_actuel")
+        # Prix de clôture : prix live en priorité, sinon prix de référence du stop
+        prix_yes_actuel = pos.get("prix_actuel") or pos.get("prix_stop_ref")
         if prix_yes_actuel is None:
             continue
 

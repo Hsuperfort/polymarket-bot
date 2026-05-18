@@ -53,21 +53,23 @@ def initialiser():
 
         -- Positions de trading (logique prix d'entrée / prix de sortie)
         CREATE TABLE IF NOT EXISTS positions (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            opportunite_id  INTEGER,
-            question        TEXT NOT NULL,
-            event_title     TEXT,
-            url             TEXT,
-            direction       TEXT NOT NULL,      -- YES ou NO
-            mise            REAL NOT NULL,      -- USDC investis
-            prix_yes_entree REAL,               -- prix YES au moment de l'entrée
-            prix_yes_cible  REAL,               -- objectif IA (prix YES visé)
-            nb_parts        REAL,               -- nombre de parts achetées
-            prix_yes_sortie REAL,               -- prix YES à la sortie (rempli à la clôture)
-            statut          TEXT DEFAULT 'ouvert',
-            gain_perte      REAL,
-            date_ouverture  TEXT NOT NULL,
-            date_cloture    TEXT
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            opportunite_id      INTEGER,
+            question            TEXT NOT NULL,
+            event_title         TEXT,
+            url                 TEXT,
+            direction           TEXT NOT NULL,      -- YES ou NO
+            mise                REAL NOT NULL,      -- USDC investis
+            prix_yes_entree     REAL,               -- prix YES au moment de l'entrée
+            prix_yes_cible      REAL,               -- objectif IA (prix YES visé)
+            nb_parts            REAL,               -- nombre de parts achetées
+            prix_yes_sortie     REAL,               -- prix YES à la sortie (rempli à la clôture)
+            statut              TEXT DEFAULT 'ouvert',
+            gain_perte          REAL,
+            date_ouverture      TEXT NOT NULL,
+            date_cloture        TEXT,
+            stop_loss_triggered INTEGER DEFAULT 0,  -- 1 dès que le stop-loss est détecté
+            prix_stop_ref       REAL                -- prix YES de référence au moment du stop
         );
     """)
     conn.commit()
@@ -77,10 +79,12 @@ def initialiser():
         row[1] for row in conn.execute("PRAGMA table_info(positions)")
     }
     for col, typ in [
-        ("prix_yes_entree", "REAL"),
-        ("prix_yes_cible",  "REAL"),
-        ("nb_parts",        "REAL"),
-        ("prix_yes_sortie", "REAL"),
+        ("prix_yes_entree",     "REAL"),
+        ("prix_yes_cible",      "REAL"),
+        ("nb_parts",            "REAL"),
+        ("prix_yes_sortie",     "REAL"),
+        ("stop_loss_triggered", "INTEGER DEFAULT 0"),
+        ("prix_stop_ref",       "REAL"),
     ]:
         if col not in colonnes_existantes:
             conn.execute(f"ALTER TABLE positions ADD COLUMN {col} {typ}")
@@ -245,6 +249,17 @@ def ouvrir_position(opp: dict, mise: float) -> int:
     conn.commit()
     conn.close()
     return pos_id
+
+
+def marquer_stop_loss(pos_id: int, prix_stop_ref: float = None):
+    """Persiste le flag stop-loss pour qu'il survive aux échecs de récupération du prix."""
+    conn = connexion()
+    conn.execute(
+        "UPDATE positions SET stop_loss_triggered = 1, prix_stop_ref = ? WHERE id = ?",
+        (prix_stop_ref, pos_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def clore_position(pos_id: int, prix_yes_sortie: float):
