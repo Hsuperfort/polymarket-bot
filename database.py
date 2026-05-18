@@ -260,14 +260,23 @@ def clore_position(pos_id: int, prix_yes_sortie: float):
 
 def charger_positions(statut: str = None):
     conn = connexion()
+    sql = """
+        SELECT p.*,
+               o.score        AS score,
+               o.confiance    AS confiance,
+               o.raisonnement AS raisonnement,
+               o.prob_marche  AS prob_marche_opp
+        FROM positions p
+        LEFT JOIN opportunites o ON o.id = p.opportunite_id
+        {where}
+        ORDER BY p.date_ouverture DESC
+    """
     if statut:
         rows = conn.execute(
-            "SELECT * FROM positions WHERE statut = ? ORDER BY date_ouverture DESC", (statut,)
+            sql.format(where="WHERE p.statut = ?"), (statut,)
         ).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT * FROM positions ORDER BY date_ouverture DESC"
-        ).fetchall()
+        rows = conn.execute(sql.format(where="")).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
