@@ -46,24 +46,6 @@ if now - derniere_sync > INTERVALLE_SYNC:
     st.session_state["derniere_sync_ts"] = now
     st.session_state["derniere_actu_ts"] = 0  # force ré-actualisation des prix
 
-# Timer JS : compte à rebours en temps réel + rechargement automatique
-st.markdown(f"""
-<script>
-(function() {{
-    var total = {INTERVALLE_SYNC};
-    function tick() {{
-        total--;
-        if (total <= 0) {{ window.location.reload(); return; }}
-        var m = Math.floor(total / 60);
-        var s = total % 60;
-        var el = document.getElementById('sync-countdown');
-        if (el) el.innerText = '⏱ Sync auto dans ' + m + 'm' + (s < 10 ? '0' : '') + s + 's';
-        setTimeout(tick, 1000);
-    }}
-    setTimeout(tick, 1000);
-}})();
-</script>
-""", unsafe_allow_html=True)
 
 # ─── Auto-actualisation des prix ─────────────────────────────────────────────
 
@@ -182,7 +164,25 @@ with st.sidebar:
 h1, h2 = st.columns([5, 1])
 h1.markdown("## 🎯 Polymarket Dashboard")
 
-h2.markdown('<span id="sync-countdown" style="font-size:0.75em; color:#888;">⏱ Chargement...</span>', unsafe_allow_html=True)
+h2.markdown(f"""
+<div id="sync-cd" style="font-size:0.75em; color:#888; text-align:center;">⏱ …</div>
+<script>
+(function(){{
+  var t={INTERVALLE_SYNC};
+  function tick(){{
+    t--;
+    if(t<=0){{window.location.reload();return;}}
+    var el=document.getElementById('sync-cd');
+    if(el){{
+      var m=Math.floor(t/60), s=t%60;
+      el.innerText='⏱ Sync dans '+m+'m'+(s<10?'0':'')+s+'s';
+    }}
+    setTimeout(tick,1000);
+  }}
+  tick();
+}})();
+</script>
+""", unsafe_allow_html=True)
 
 if h2.button("☁️ Sync maintenant", use_container_width=True):
     _sync_git()
