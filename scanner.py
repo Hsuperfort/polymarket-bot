@@ -243,7 +243,13 @@ PROMPT_SYSTEME = """Tu es un analyste spécialisé en marchés prédictifs court
 Ces marchés se résolvent dans les 30 prochains jours. L'horizon court implique que :
 - L'état ACTUEL des choses prime sur les tendances longues
 - Un écart de 5+ points entre ta proba et le marché peut être exploitable
-- La confiance doit être "haute" uniquement si tu as des bases solides et récentes
+
+Barème du score (utilise TOUTE l'échelle) :
+  0-2 : pas d'opinion, données insuffisantes
+  3-4 : légère conviction, edge < 5 points
+  5-6 : conviction réelle, edge 5-15 points, signal modéré
+  7-8 : forte conviction, edge > 15 points OU signal clair dans les news/données live
+  9-10 : certitude quasi-totale, marché manifestement mal pricé
 
 Réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
 """
@@ -288,7 +294,7 @@ Réponds en JSON avec exactement ces champs :
   "confiance": <"faible"|"moyenne"|"haute" — haute seulement si les news confirment clairement>,
   "direction": <"YES"|"NO"|"SKIP">,
   "edge": <float, différence absolue entre ta proba et celle du marché>,
-  "score": <int 0-10, attractivité — bonus si les news apportent un signal clair>,
+  "score": <int 0-10, utilise le barème complet — un edge de 10 points avec signal modéré vaut 5-6, un edge de 20+ points vaut 7-8>,
   "raisonnement": <string, 2-3 phrases factuelles citant les news si pertinent>
 }}
 
