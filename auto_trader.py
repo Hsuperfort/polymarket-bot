@@ -23,11 +23,12 @@ def _lire_config():
 
 _cfg = _lire_config()
 
-MISE_AUTO        = float(_cfg.get("mise_auto",     os.getenv("MISE_AUTO", 10)))
-SCORE_MIN_AUTO   = int(  _cfg.get("score_min",     os.getenv("SCORE_MIN_AUTO", 6)))
-MAX_POSITIONS    = int(  _cfg.get("max_positions",  os.getenv("MAX_POSITIONS_OUVERTES", 8)))
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+MISE_AUTO             = float(_cfg.get("mise_auto",        os.getenv("MISE_AUTO", 10)))
+SCORE_MIN_AUTO        = int(  _cfg.get("score_min",        os.getenv("SCORE_MIN_AUTO", 6)))
+SCORE_MIN_COURT_TERME = int(  _cfg.get("score_min_court",  5))   # seuil pour marchés < 7j
+MAX_POSITIONS         = int(  _cfg.get("max_positions",    os.getenv("MAX_POSITIONS_OUVERTES", 8)))
+TELEGRAM_TOKEN        = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 # ─── Auto-ouverture ───────────────────────────────────────────────────────────
@@ -53,8 +54,11 @@ def auto_ouvrir(opportunites: list) -> list:
         score     = opp.get("score", 0)
         question  = opp.get("question", "").lower().strip()
         direction = opp.get("direction", "SKIP")
+        jours     = opp.get("jours", 99)
 
-        if score < SCORE_MIN_AUTO:
+        # Seuil adapté : plus souple pour les marchés < 7 jours
+        seuil = SCORE_MIN_COURT_TERME if jours < 7 else SCORE_MIN_AUTO
+        if score < seuil:
             continue
         if direction == "SKIP":
             continue
