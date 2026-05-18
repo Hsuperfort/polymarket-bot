@@ -2,8 +2,11 @@ name: Scanner Polymarket
 
 on:
   schedule:
-    - cron: '0,30 * * * *'   # toutes les 30 min (à :00 et :30)
-  workflow_dispatch:           # déclenchement manuel depuis GitHub
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   scan:
@@ -11,16 +14,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout code
+      - name: Checkout code (avec DB)
         uses: actions/checkout@v4
-
-      - name: Restaurer la base de données
-        uses: actions/cache@v4
-        with:
-          path: data/polymarket.db
-          key: polymarket-db-${{ github.run_number }}
-          restore-keys: |
-            polymarket-db-
 
       - name: Python 3.11
         uses: actions/setup-python@v5
@@ -40,3 +35,11 @@ jobs:
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scanner.py
+
+      - name: Sauvegarder la base de données
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Actions"
+          git add data/polymarket.db
+          git diff --staged --quiet || git commit -m "chore: update DB [skip ci]"
+          git push

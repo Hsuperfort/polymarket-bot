@@ -465,8 +465,9 @@ with tab_portfolio:
                 cc1, cc2 = st.columns([2, 1])
                 with cc1:
                     val_defaut = round(prix_actuel * 100, 1) if prix_actuel else round(prix_part_cible * 100, 1)
+                    val_defaut = max(val_defaut, 0.1)
                     prix_sortie_pct = st.number_input(
-                        "Prix de sortie YES (%)", min_value=1.0, max_value=99.0,
+                        "Prix de sortie YES (%)", min_value=0.1, max_value=99.0,
                         value=float(val_defaut), step=0.5,
                         key=f"sortie_{pos['id']}",
                         help="Entre le prix YES actuel affiché sur Polymarket"

@@ -1,8 +1,9 @@
 # Secrets
 .env
 
-# Données locales (ne pas committer)
-data/
+# Données locales (ne pas committer sauf la DB)
+data/*.json
+data/*.csv
 logs/
 
 # Python
